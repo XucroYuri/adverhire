@@ -46,7 +46,7 @@ docs/
 ├── 05-storage.md          # 存储与基础设施（按需）
 ├── 06-api-shell.md        # 壳：REST API / SSE / Web 工作台（按需）
 ├── 07-roadmap.md          # 里程碑（Phase 0–3）
-├── marketing/             # 对外传播内容（hiredetector 预热文章等）
+├── problems/             # 对抗性招聘问题目录：场景×技法 → 解法/对抗思路 → 决策依据
 └── README.md              # 本罗盘
 ```
 
