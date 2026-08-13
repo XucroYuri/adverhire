@@ -49,7 +49,7 @@
 
 - **开发者 / 维护者路径**：按"对抗思路"里标注的引擎函数名（`trap_tactics` / `detect_signals` /
   `detect_contradictions` / `classify_answer` / `followup_directive`）对到实现，理解为什么这样设，
-  迭代时据此增强。方法论的细节见 `.skill/adverhire/references/adversarial-method.md`。
+  迭代时据此增强。方法论的细节见 `.claude/skills/adverhire/references/adversarial-method.md`。
 - **面试官路径**：按场景去读对应技法，把"对抗思路"当可执行的 checklist；把"输出决策依据"
   当是否继续推进的参考。
 

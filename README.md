@@ -47,7 +47,7 @@
 4. **全程核验**：五维信号 + 跨源矛盾 + 风险分级，带证据链。
 5. **解读**：风险分级不是结论，证据链给你看"为什么这么判"。
 
-方法论文档见 `.skill/adverhire/references/adversarial-method.md`。
+方法论文档见 `.claude/skills/adverhire/references/adversarial-method.md`。
 
 ### 直接命令行（subagent / 脚本接口）
 
@@ -103,7 +103,7 @@ adverhire/           # 确定性规则内核（零 LLM 依赖）
   machine.py         # 薄纯函数组合，供 subagent 调用
   followup.py        # classify_answer 三态判别 + 追问纪律
 scripts/             # verify.py：subagent 结构化接口（tactics/validate/review）
-.skill/adverhire/    # Claude Code Skill（交互皮肤 + 推理协议）
+.claude/skills/adverhire/  # Claude Code Skill（交互皮肤 + 推理协议）
 tests/               # 纯规则确定性测试 + R1 白盒基线
 docs/                # 立项文档、设计 spec、实现计划、docs 罗盘
 ```
