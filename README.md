@@ -1,4 +1,6 @@
-# adverhire | Adversarial Hiring Agent（对抗性招聘智能体·招聘测谎仪）
+# adverhire | Adversarial Hiring Agent
+
+对抗性招聘智能体·招聘测谎仪
 
 **一句话**：AI 时代，每个求职者都能伪装成"完美候选人"——adverhire 帮面试官把虚假的完美逐层戳穿，还原真实能力。让招聘回归真实能力，让踏实做事的人不被劣币驱逐。
 
