@@ -77,8 +77,8 @@ def scrutinize(llm: LLMClient, answers: list[Claim],
                                    if c.get("index") == i), ""),
             ))
     # D 矛盾：本项目先用初筛原样透传（含 nature），不做二次确认，后续任务可加
-    contradictions = [Contradiction(Claim(a=str(cc.get("a", "")), source="answer"),
-                                    Claim(b=str(cc.get("b", "")), source="resume"),
+    contradictions = [Contradiction(Claim(str(cc.get("a", "")), source="answer"),
+                                    Claim(str(cc.get("b", "")), source="resume"),
                                     nature=str(cc.get("nature", "")))
                       for cc in contra_candidates if cc.get("a") and cc.get("b")]
     return signals, contradictions

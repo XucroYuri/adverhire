@@ -1,0 +1,11 @@
+{
+  "flash": [
+    {"claims": [{"bullet": "QPS优化", "tech": ["redis"], "metric": "50", "source": "resume"},
+                {"bullet": "自研压测", "tech": ["python"], "metric": null, "source": "resume"},
+                {"bullet": "纯软技能", "tech": [], "metric": null, "source": "resume"}]}
+  ],
+  "pro": [
+    {"traps": [{"claim_idx": 0, "wrong_preset": "改成1800", "question": "从200怎么调到1800？", "discriminators": ["纠正"]},
+                {"claim_idx": 1, "wrong_preset": "用JMeter", "question": "你们压测用JMeter跑的吗？", "discriminators": ["自研"]}]}
+  ]
+}

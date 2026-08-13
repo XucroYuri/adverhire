@@ -1,0 +1,12 @@
+{
+  "flash": [
+    {"claims": [{"bullet": "QPS优化", "tech": ["redis"], "metric": "50", "source": "resume"}]},
+    {"signals": [{"label": "missing_affect", "quote": "部分表述无情绪体感", "confidence": 0.3}], "contradictions": []}
+  ],
+  "pro": [
+    {"traps": [{"claim_idx": 0, "wrong_preset": "改成1800", "question": "从200怎么调到1800？", "discriminators": []}]},
+    {"confirmations": [{"index": 0, "confirmed": true, "note": "低置信信号"}]},
+    {"overall": "LOW", "by_dimension": {"missing_affect": 0.3}},
+    "整体体感较真实，人工复核确认。"
+  ]
+}
