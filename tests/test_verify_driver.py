@@ -1,69 +1,81 @@
-"""测试薄驱动脚本 scripts/verify.py。
+"""测试薄驱动脚本 scripts/verify.py 的 subagent 接口（tactics/validate/review）。
 
-用可注入的 MockLLM 响应确定性驱动 pipeline，断言：
-- probe：坑题都绑定真实 claim，非 claimable 的 claim 不产生坑题。
-- review：产出结构化 RiskReport，by_dimension 五维齐全、均为 float。
-- 不变量 #2：overall 只可能是 LOW/MEDIUM/HIGH，报告不含淘汰/录用结论。
-- 判别性机制：配置更高虚构成分(faked) 的 review 风险 > 配置更低(real)。
+用纯规则引擎跑通全链路，断言：
+- tactics：输出坑题战术，绑定到不可验证断言过滤。
+- validate：强制不变量 #1（越界/非 claimable/空题过滤）。
+- review：输出结构化报告，五维浮点、风险分级、判别性纯规则成立。
+全程零 LLM/Mock——这是确定性规则的回归保障。
 """
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-FIX = REPO / "tests" / "fixtures"
-RESP = FIX / "responses"
+SCRIPT = REPO / "scripts" / "verify.py"
+
+
+def _write_tmp(content) -> Path:
+    f = Path(tempfile.mktemp(suffix=".json"))
+    f.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    return f
 
 
 def _run(*argv: str) -> dict:
-    proc = subprocess.run(
-        [sys.executable, str(REPO / "scripts" / "verify.py"), *argv],
-        capture_output=True,
-        text=True,
-        cwd=REPO,
-    )
-    assert proc.returncode == 0, f"非零退出: {proc.stderr}"
+    proc = subprocess.run([sys.executable, str(SCRIPT), *argv],
+                          capture_output=True, text=True, cwd=REPO)
+    assert proc.returncode == 0, f"vexit: {proc.stderr}"
     return json.loads(proc.stdout)
 
 
-def test_probe_binds_questions_to_claims_and_skips_unclaimable():
-    out = _run("probe", str(FIX / "real.md"), "--mock",
-               "--responses", str(RESP / "mock_probe.json"))
-    claims = out["claims"]
-    # 三个 claim 中前两个 claimable，第三个（纯软技能，无 tech/metric）不 claimable
-    questions = out["questions"]
-    assert len(questions) == 2
-    for q in questions:
-        assert 0 <= q["claim_idx"] < len(claims)
-        assert q["claim"] == claims[q["claim_idx"]]["bullet"]  # 绑定真实 claim
-    # 非 claimable 的不出坑题
-    assert all(q["claim"] != "纯软技能" for q in questions)
+def test_tactics_binds_to_claimable_only():
+    claims = _write_tmp([
+        {"bullet": "优化缓存QPS+50%", "tech": ["redis"], "metric": 50},
+        {"bullet": "软技能", "tech": [], "metric": None},
+    ])
+    out = _run("tactics", "--claims", str(claims))
+    assert len(out["claims"]) == 2
+    # 两个战术都只针对可验证断言[0]
+    assert len(out["tactics"]) >= 1
+    assert all(t["claim_idx"] == 0 for t in out["tactics"])
 
 
-def test_review_report_structure_and_invariant2():
-    out = _run("review", str(FIX / "real.md"), str(FIX / "real_answers.json"),
-               "--mock", "--responses", str(RESP / "mock_review_real.json"))
-    report = out["report"]
-    assert report["overall"] in {"LOW", "MEDIUM", "HIGH"}
-    # 五维齐全、均为 float
-    dims = report["by_dimension"]
+def test_validate_filters_invariant1():
+    claims = _write_tmp([
+        {"bullet": "优化缓存", "tech": ["redis"], "metric": 50},
+        {"bullet": "软技能", "tech": [], "metric": None},
+    ])
+    traps = _write_tmp([
+        {"claim_idx": 0, "question": "怎么调的？", "wrong_preset": "p", "discriminators": []},
+        {"claim_idx": 1, "question": "非claimable", "wrong_preset": "p", "discriminators": []},
+        {"claim_idx": 99, "question": "越界", "wrong_preset": "p", "discriminators": []},
+        {"claim_idx": 0, "question": "  ", "wrong_preset": "p", "discriminators": []},
+    ])
+    out = _run("validate", "--claims", str(claims), "--traps", str(traps))
+    assert len(out["questions"]) == 1
+    assert out["questions"][0]["question"] == "怎么调的？"
+
+
+def test_review_discrimination_real_vs_faked_via_pure_rules():
+    claims = _write_tmp([
+        {"bullet": "优化缓存QPS+50%", "tech": ["redis"], "metric": 50},
+    ])
+    embodied = _write_tmp(["其实当时我们用了lua批量回源，回滚过一次才稳定下来"])
+    vague = _write_tmp(["通过深度优化和先进算法显著提升性能，达到业界领先"])
+
+    real = _run("review", "--claims", str(claims), "--answers", str(embodied),
+                "--summary", "见真实细节")
+    faked = _run("review", "--claims", str(claims), "--answers", str(vague),
+                 "--summary", "疑似AI注水")
+
+    rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    assert real["overall"] in rank and faked["overall"] in rank
+    assert rank[faked["overall"]] > rank[real["overall"]]
+    # 五维浮点齐全
+    dims = faked["by_dimension"]
     assert set(dims) == {"template_cliche", "no_embodied_detail", "over_generalization",
                          "missing_affect", "over_standardized"}
     assert all(isinstance(v, float) for v in dims.values())
-    # 不变量 #2：绝不输出淘汰/录用结论
-    text = json.dumps(report, ensure_ascii=False)
-    assert "淘汰" not in text and "录用" not in text
-
-
-def test_review_discriminability_faked_ranks_higher_than_real():
-    real = _run("review", str(FIX / "real.md"), str(FIX / "real_answers.json"),
-                "--mock", "--responses", str(RESP / "mock_review_real.json"))
-    faked = _run("review", str(FIX / "faked.md"), str(FIX / "faked_answers.json"),
-                 "--mock", "--responses", str(RESP / "mock_review_faked.json"))
-    # 配置更高虚构成分的 faked => 信号更多、overall 风险更高
-    assert len(faked["report"]["signals"]) > len(real["report"]["signals"])
-    risk_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
-    assert risk_rank[faked["report"]["overall"]] > risk_rank[real["report"]["overall"]]

@@ -1,53 +1,66 @@
 from __future__ import annotations
-from .models import Claim, ImpactedTrap, QuestionSet
-from .llm import LLMClient, ModelRole
 
-TRAP_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "traps": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "claim_idx": {"type": "integer"},
-                    "wrong_preset": {"type": "string"},
-                    "question": {"type": "string"},
-                    "discriminators": {"type": "array", "items": {"type": "string"}},
-                },
-            },
-        }
-    },
-}
+from .models import Claim, ImpactedTrap, QuestionSet, TrapTactic
 
 
-def gen_traps(llm: LLMClient, claims: list[Claim]) -> QuestionSet:
-    # 只对"可验证断言"生成坑题：有量化指标或技术栈
-    claimable = [i for i, c in enumerate(claims) if c.metric is not None or c.tech]
-    if not claimable:
-        return QuestionSet()
+def is_claimable(claim: Claim) -> bool:
+    """断言可验证：有量化指标或有技术栈。"""
+    return claim.metric is not None or bool(claim.tech)
 
-    prompt = _prompt_for(claims, claimable)
-    data = llm.structured(ModelRole.PRO, prompt, TRAP_SCHEMA)
 
-    traps: list[ImpactedTrap] = []
-    for item in data.get("traps", []):
-        idx = item.get("claim_idx")
-        question = (item.get("question") or "").strip()
-        if isinstance(idx, int) and 0 <= idx < len(claims) and question:
-            traps.append(ImpactedTrap(
-                claim=claims[idx],
-                wrong_preset=(item.get("wrong_preset") or "").strip(),
-                question=question,
-                discriminators=[str(d) for d in item.get("discriminators", []) if d],
+def trap_tactics(claims: list[Claim]) -> list[TrapTactic]:
+    """确定性产出每个可验证断言可用的坑题战术，供 subagent 依此设计具体坑题。
+
+    - A1 数值：断言有量化指标 → 植入错误但合理的数值，看是否纠正。
+    - A2 技术细节：断言有技术栈 → 把实现细节改成"看似合理但实际错"，看是否指出。
+    - A3 决策：断言涉及设计/选型取向 → 植入"外行才会做"的决策，看是否反驳。
+
+    具体 wrong_preset / question / discriminators 的语义内容由 subagent 依战术实时设计。
+    """
+    tactics: list[TrapTactic] = []
+    for claim in claims:
+        if not is_claimable(claim):
+            continue
+        if claim.metric is not None:
+            tactics.append(TrapTactic(
+                kind="a1_numeric", claim=claim,
+                angle="把断言里的量化指标改成错误但合理的新值，请候选人确认或纠正。",
+                focus="量化指标",
             ))
-    # 不变量 #1：只保留能关联到既有 Claim 的坑题（上面已过滤越界 idx）
+        if claim.tech:
+            tactics.append(TrapTactic(
+                kind="a2_technical", claim=claim,
+                angle="把实现细节/技术选型改成看似合理但实际错的表述，看候选人是否指出。",
+                focus="技术细节",
+            ))
+        if "选型" in claim.bullet or "架构" in claim.bullet or "设计" in claim.bullet \
+                or "技术方案" in claim.bullet or "主导" in claim.bullet:
+            tactics.append(TrapTactic(
+                kind="a3_decision", claim=claim,
+                angle="植入一个外行才会选的决策，看候选人是否解释权衡。",
+                focus="决策取舍",
+            ))
+    return tactics
+
+
+def validate_traps(claims: list[Claim], raw_traps: list[dict]) -> QuestionSet:
+    """校验 subagent 填的坑题，强制不变量 #1：
+
+    坑题永远派生自真实、可验证的断言——只保留 claim_idx 在可 claimable 范围内、
+    且 question 非空的项。语义内容由 subagent 提供，这里只做确定性下限校验。
+    """
+    claimable_idx = {i for i, c in enumerate(claims) if is_claimable(c)}
+    traps: list[ImpactedTrap] = []
+    for item in raw_traps or []:
+        idx = item.get("claim_idx")
+        question = str(item.get("question") or "").strip()
+        # 不变量 #1：idx 必须落在可 claimable 断言上，且问题非空
+        if not (isinstance(idx, int) and idx in claimable_idx and question):
+            continue
+        traps.append(ImpactedTrap(
+            claim=claims[idx],
+            wrong_preset=str(item.get("wrong_preset") or "").strip(),
+            question=question,
+            discriminators=[str(d) for d in item.get("discriminators", []) if d],
+        ))
     return QuestionSet(questions=traps)
-
-
-def _prompt_for(claims: list[Claim], claimable: list[int]) -> str:
-    preview = "\n".join(f"[{i}] {claims[i].bullet}" for i in claimable)
-    return (
-        "对抗性坑题生成。对下列简历断言，为每条生成一个\"看似合理但错误\"的验证坑题：\n"
-        f"{preview}\n要求：坑题必须派生自该断言本身，不提出格问题。"
-    )

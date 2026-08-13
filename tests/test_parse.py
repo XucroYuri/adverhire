@@ -1,21 +1,32 @@
-from adverhire.parse import parse_resume
-from adverhire.llm import ModelRole, MockLLM
-from adverhire.models import Claim
+from adverhire.parse import normalize_claims
 
-def test_parse_builds_claims_from_flash_response():
-    mock = MockLLM(responses={ModelRole.FLASH: [{
-        "claims": [
-            {"bullet": "优化缓存 QPS+50%", "tech": ["redis"], "metric": "50", "source": "resume"},
-            {"bullet": "自研压测工具", "tech": ["python"], "metric": None, "source": "resume"},
-        ]
-    }]})
-    claims = parse_resume(mock, "某简历全文")
+
+def test_normalize_claims_builds_claim_objects():
+    claims = normalize_claims([
+        {"bullet": "优化缓存 QPS+50%", "tech": ["redis", "lua"], "metric": "50", "source": "resume"},
+        {"bullet": "自研压测工具", "tech": ["python"], "metric": None, "source": "resume"},
+    ])
     assert [c.bullet for c in claims] == ["优化缓存 QPS+50%", "自研压测工具"]
+    assert claims[0].metric == 50.0 and claims[0].tech == ["redis", "lua"]
     assert all(c.source == "resume" for c in claims)
-    assert claims[0].metric == 50.0 and claims[1].metric is None
-    assert mock.calls[0][0] == ModelRole.FLASH  # 解析用 Flash
 
-def test_parse_handles_missing_technical_list():
-    mock = MockLLM(responses={ModelRole.FLASH: [{"claims": [{"bullet": "纯文本", "tech": [], "metric": None, "source": "resume"}]}]})
-    c = parse_resume(mock, "文本")[0]
-    assert c.tech == [] and c.metric is None
+
+def test_normalize_claims_defaults_metric_and_source():
+    claims = normalize_claims([{"bullet": "纯文本", "tech": [], "metric": None}])
+    assert claims[0].metric is None
+    assert claims[0].source == "resume"
+
+
+def test_to_float_rejects_inf_and_nan():
+    claims = normalize_claims([
+        {"bullet": "inf", "tech": ["x"], "metric": "inf", "source": "resume"},
+        {"bullet": "nan", "tech": ["x"], "metric": "nan", "source": "resume"},
+    ])
+    assert claims[0].metric is None
+    assert claims[1].metric is None
+
+
+def test_normalize_claims_handles_empty_and_garbage():
+    assert normalize_claims([]) == []
+    claims = normalize_claims([{"bullet": "abc", "tech": [], "metric": "not-a-number"}])
+    assert claims[0].metric is None

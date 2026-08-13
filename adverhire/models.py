@@ -29,6 +29,13 @@ class ImpactedTrap:
     discriminators: list[str] = field(default_factory=list)
 
 @dataclass
+class TrapTactic:
+    kind: str          # "a1_numeric" / "a2_technical" / "a3_decision"
+    claim: Claim
+    angle: str         # 战术提示：subagent 依此设计具体坑题
+    focus: str         # 应从哪个细节切入（如 metric / 某技术 / 某决策）
+
+@dataclass
 class FollowUp:
     ancestor_question: str
     branch: str  # vague / corrected / echoed
