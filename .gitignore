@@ -1,2 +1,7 @@
 # Internal agent/session state — not project source
 .omc/
+
+# Python environment and caches
+.venv/
+__pycache__/
+*.pyc
