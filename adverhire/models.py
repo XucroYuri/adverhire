@@ -68,3 +68,21 @@ class RiskReport:
     contradictions: list[Contradiction] = field(default_factory=list)
     by_dimension: dict[str, float] = field(default_factory=dict)
     summary: str = ""
+
+
+@dataclass
+class AnswerTurn:
+    """一轮问答的行为记录。除 text 外都是 subagent 在会话中观察记录的行为字段。
+
+    depth: 对同一断言的第几层追问(0=首答)
+    answer_latency: 回答前思考时长(秒)的主观档位或秒数(0=未知/秒答)
+    self_repaired: 是否有真实自我修正("其实不对""我说错了""重新说"等纠错轨迹)
+    affect_cue: 是否带真实情绪起伏(懊悔/得意/卡壳/挣扎)
+    reasoning_visible: 是否愿意露出推理过程(给过程而非只下结论)
+    """
+    text: str
+    depth: int = 0
+    answer_latency: float | None = None   # None=未观察；0≈秒答
+    self_repaired: bool = False
+    affect_cue: bool = False
+    reasoning_visible: bool = False

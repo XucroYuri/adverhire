@@ -4,15 +4,23 @@ from .models import (
     RiskLevel, SignalEvidence, Contradiction, RiskReport, Dimen,
 )
 
-# 各维度的风险权重。
-# "AI 空泛胜任力"维度（模板化/泛化/无情绪）是 AI 代答最强的泄漏信号，满权重。
-# "风格"维度（无具身/用词规整）真人才也会命中（简洁/精炼的回答），降权避免误伤。
+# 各维度风险权重。
+# 结构化/行为信号（consistency_collapse/detail_exhaustion/idiosyncrasy_absence/
+# behavioral_uniformity）是 AI 包装干扰下难伪造的核心信号，满权重。
+# 缺失式五维（template/over_generalization/no_embodied/missing_affect/over_standardized）
+# 可被聪明 AI 用真人口吻词+假数字模仿，降为低权重第一遍快筛，单条不足升档。
 _DIM_WEIGHT = {
-    "template_cliche": 1.0,
-    "over_generalization": 1.0,
-    "missing_affect": 1.0,
-    "no_embodied_detail": 0.5,
-    "over_standardized": 0.25,
+    # 结构性核心信号（高分）
+    "consistency_collapse": 1.0,
+    "detail_exhaustion": 1.0,
+    "idiosyncrasy_absence": 1.0,
+    "behavioral_uniformity": 1.0,
+    # 缺失式五维（低分，可被模仿）
+    "template_cliche": 0.4,
+    "over_generalization": 0.5,
+    "no_embodied_detail": 0.3,
+    "missing_affect": 0.2,
+    "over_standardized": 0.1,
 }
 
 

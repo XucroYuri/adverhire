@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .models import Claim, Contradiction, SignalEvidence
+from .models import Claim, Contradiction, SignalEvidence, AnswerTurn
 
 # —— 五维虚构成分信号（纯规则启发式，subagent 对语义歧义点可落锤）——
 
@@ -90,7 +90,7 @@ def _techs(claim: Claim) -> set[str]:
 
 
 def detect_contradictions(claims_a: list[Claim], claims_b: list[Claim]) -> list[Contradiction]:
-    """比较两组断言(source 不同)：技术栈、规模、执行矛盾。
+    """比较两组断言(source 不同)：技术栈、规模、时间线/执行矛盾。
 
     纯规则命中确定性矛盾；语义层矛盾由 subagent 判断。
     """
@@ -111,7 +111,124 @@ def detect_contradictions(claims_a: list[Claim], claims_b: list[Claim]) -> list[
                     contradictions.append(Contradiction(
                         a=a, b=b, nature="scale_mismatch",
                     ))
+            # 时间线/前后矛盾：字面级只做"改款的同一断言两来源说法互斥"的兜底；
+            # 语义时间线由 subagent 落锤。确定性的 procedural 矛盾：A、B bullet 高度重合但措辞打架。
+            if a.bullet and b.bullet and _bigrams(a.bullet) & _bigrams(b.bullet) \
+                    and ("改了" in a.bullet or "之前" in a.bullet) \
+                    and ("现在" in b.bullet or "目前" in b.bullet or "单点" in b.bullet):
+                contradictions.append(Contradiction(a=a, b=b, nature="procedural_contradiction"))
     return _dedupe(contradictions)
+
+
+# —— 结构性 + 行为特征信号（item 1/2，难被 AI 模仿）——
+
+def _concreteness(text: str) -> float:
+    """具体锚点密度：数字 + 命名的具体技术/实例，按长度归一。AI 可注入假数字，故单看不足凭。"""
+    nums = len(re.findall(r"\d+(?:\.\d+)?%?", text))
+    tech_hits = len([w for w in _HAS_NUM_TECH_WORDS if w in text])
+    length = max(1, len(text))
+    return (nums + 0.5 * tech_hits) / length
+
+
+# 命名具体实例技术词（比 _HAS_TECH_WORD 更"命名/实例"向：真经历里的点名）
+_HAS_NUM_TECH_WORDS = (
+    "redis", "kafka", "docker", "nginx", "mysql", "mongodb", "lua", "k8s",
+    "qps", "tps", "p99", "毫秒", "延迟", "命中率", "压测", "回滚", "灰度", "线上",
+)
+
+
+def detect_structural(turns: list[AnswerTurn]) -> list[SignalEvidence]:
+    """结构性信号：详情耗竭（随深度具体密度下降）+ 跨段复用（单引擎批量生成的残差）。
+
+    核心原理：真经历深挖时具体密度递增；假经历浅层答好、深层跌回泛化。
+    """
+    signals: list[SignalEvidence] = []
+    if len(turns) < 2:
+        return signals
+
+    # 2.1 详情耗竭：深挖后具体密度下降而无法重新接续。
+    #    真才常以一句平静短答总结收尾（具象 1-2 条 + 一条 summary），单条收尾不算耗竭。
+    #    只有"被追问到深处后连续 ≥2 轮都答不出具象"（无法重新接续）才算耗竭。
+    deep_vague_streak = 0
+    max_streak = 0
+    for t in sorted(turns, key=lambda x: x.depth):
+        if t.depth >= 1 and _concreteness(t.text) < 0.003:
+            deep_vague_streak += 1
+            max_streak = max(max_streak, deep_vague_streak)
+        else:
+            deep_vague_streak = 0
+    if max_streak >= 2:
+        signals.append(SignalEvidence(
+            label="detail_exhaustion", quote=turns[-1].text[:120],
+            confidence=0.7,
+            verdict_note="被追问到深处后连续多轮答不出具象细节，无法重新接续（详情耗竭）",
+        ))
+    # 从浅到深全程无命名实例/数字锚点（一条具象都没有）也记一条，置信度低
+    if all(_concreteness(t.text) < 0.002 for t in turns):
+        signals.append(SignalEvidence(
+            label="detail_exhaustion", quote=turns[-1].text[:120],
+            confidence=0.5, verdict_note="从浅到深全程无命名实例/数字锚点",
+        ))
+
+    # 2.3 独特性残差缺失：跨段高度复用=单引擎批量生成。
+    #    用字符 bigram Jaccard 逼近"同构句式复用"。真才同话题会在内容词上复用，
+    #    但 Skeleton 级高复用(≥3 轮 + >0.15)指向"单个生成器批量套模板"而非独立经历。
+    if len(turns) >= 3:
+        reuse = _cross_reuse([t.text for t in turns])
+        if reuse > 0.15:
+            signals.append(SignalEvidence(
+                label="idiosyncrasy_absence", quote=turns[0].text[:120],
+                confidence=min(1.0, reuse * 2),
+                verdict_note=f"多段回答高度同构复用（相似度{reuse:.2f}），像单个引擎批量生成而非独立经历",
+            ))
+    return signals
+
+
+def _bigrams(s: str):
+    return {s[i:i + 2] for i in range(len(s) - 1)} if len(s) > 1 else set()
+
+
+def _cross_reuse(texts: list[str]) -> float:
+    if len(texts) < 2:
+        return 0.0
+    total, n = 0.0, 0
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            a, b = _bigrams(texts[i]), _bigrams(texts[j])
+            if not (a and b):
+                continue
+            total += len(a & b) / len(a | b)
+            n += 1
+    return total / n if n else 0.0
+
+
+def detect_behavioral(turns: list[AnswerTurn]) -> list[SignalEvidence]:
+    """行为流信号：整场行为是否'平滑恒定'(机器) vs 非均匀(真人)。
+
+    真人深挖下出现自我修正/情绪起伏/露出推理/思考延迟；AI 提词器平滑恒定、秒答、无挣扎。
+    只有 subagent 观察到的字段被使用；未观察(默认值)时不算匹配。
+    """
+    signals: list[SignalEvidence] = []
+    if len(turns) < 2:
+        return signals
+
+    repaired = sum(1 for t in turns if t.self_repaired)
+    affect = sum(1 for t in turns if t.affect_cue)
+    reasoning = sum(1 for t in turns if t.reasoning_visible)
+    # 秒答占比（latency 被观察到且≈0）
+    observed_lat = [t for t in turns if t.answer_latency is not None]
+    instant_ratio = (sum(1 for t in observed_lat if t.answer_latency == 0) / len(observed_lat)) if observed_lat else None
+
+    human_markers = repaired + affect + reasoning
+    if human_markers == 0:
+        confidence = 0.7 if len(observed_lat) == len(turns) and instant_ratio == 1.0 else 0.5
+        signals.append(SignalEvidence(
+            label="behavioral_uniformity", quote=turns[0].text[:120],
+            confidence=confidence,
+            verdict_note=(f"整场无自我修正/情绪起伏/推理外露"
+                          + (f"，且全程秒答(占比{instant_ratio:.0%})" if instant_ratio is not None else "")),
+        ))
+    return signals
 
 
 def _dedupe(contradictions: list[Contradiction]) -> list[Contradiction]:

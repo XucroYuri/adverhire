@@ -74,7 +74,24 @@ def cmd_review(args) -> int:
     raw_claims = json.loads(args.claims.read_text(encoding="utf-8"))
     answers_raw = json.loads(args.answers.read_text(encoding="utf-8"))
     claims, _ = SM.parse_and_tactics(raw_claims)
-    answers = [Claim(str(a), source="answer") for a in answers_raw]
+    # answers 支持两种形态：
+    #   ["回答文本", ...]（纯文本）                                         → Claim
+    #   [{"text": "...", "depth":1, "self_repaired":true, ...}, ...]（含行为） → AnswerTurn
+    from adverhire.models import AnswerTurn
+    answers = []
+    for item in answers_raw:
+        if isinstance(item, str):
+            answers.append(Claim(item, source="answer"))
+        else:
+            answers.append(AnswerTurn(
+                text=str(item.get("text", "")),
+                depth=int(item.get("depth", 0)),
+                answer_latency=(float(item["answer_latency"])
+                                if item.get("answer_latency") is not None else None),
+                self_repaired=bool(item.get("self_repaired", False)),
+                affect_cue=bool(item.get("affect_cue", False)),
+                reasoning_visible=bool(item.get("reasoning_visible", False)),
+            ))
     report = SM.advance(answers, claims, summary=args.summary or "")
     payload = {
         "overall": report.overall.value,

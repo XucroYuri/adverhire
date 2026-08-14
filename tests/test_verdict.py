@@ -15,21 +15,23 @@ def test_grade_low_when_few_weak_signals():
     assert rep.overall == RiskLevel.LOW
 
 
-def test_grade_medium_requires_strong_competence_signal():
-    # 单个满分权重维度(template_cliche)的强信号 → MEDIUM
-    rep = grade_risk([sig("template_cliche", 0.8)], [])
+def test_grade_medium_with_strong_structural_signal():
+    # 单个满分权重**结构性**信号(detail_exhaustion)的强信号 → MEDIUM
+    rep = grade_risk([sig("detail_exhaustion", 0.8)], [])
     assert rep.overall == RiskLevel.MEDIUM
 
 
-def test_grade_low_with_only_downweighted_style_signal():
-    # no_embodied_detail 是降权维度(0.5)，单个即使 0.8 也到不了 MEDIUM(0.8*0.5=0.4<0.7)
-    rep = grade_risk([sig("no_embodied_detail", 0.8)], [])
+def test_grade_low_with_only_downweighted_absence_signal():
+    # 缺失式五维已降权（可被 AI 注入真人口吻/假数字模仿）：单个即使 0.8 也到不了 MEDIUM
+    rep = grade_risk([sig("template_cliche", 0.8)], [])
     assert rep.overall == RiskLevel.LOW
+    rep2 = grade_risk([sig("no_embodied_detail", 0.8)], [])
+    assert rep2.overall == RiskLevel.LOW
 
 
 def test_grade_high_with_many_signals_and_contra():
     rep = grade_risk(
-        [sig("no_embodied_detail", 0.8), sig("over_generalization", 0.7)],
+        [sig("detail_exhaustion", 0.8), sig("behavioral_uniformity", 0.7)],
         [contra()],
     )
     assert rep.overall == RiskLevel.HIGH
