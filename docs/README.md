@@ -47,6 +47,8 @@ docs/
 ├── 06-api-shell.md        # 壳：REST API / SSE / Web 工作台（按需）
 ├── 07-roadmap.md          # 里程碑（Phase 0–3）
 ├── problems/             # 对抗性招聘问题目录：场景×技法 → 解法/对抗思路 → 决策依据
+├── strong-discrimination-framework.md  # 强鉴别能力框架：一致性塌缩+独特性残差+行为特征
+├── adversary/             # 开源对抗情报：~99 个求职侧 AI 工具编目 → 反制映射
 └── README.md              # 本罗盘
 ```
 
