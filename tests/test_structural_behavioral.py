@@ -6,7 +6,7 @@
 - behavioral_uniformity（平滑恒定 vs 真人非均匀）+ idiosyncrasy_absence（跨段复用）。
 """
 from adverhire.models import AnswerTurn, Claim
-from adverhire.scrutinize import detect_structural, detect_behavioral
+from adverhire.scrutinize import detect_structural, detect_behavioral, detect_overalignment
 from adverhire.machine import AdversarialStateMachine
 
 
@@ -88,3 +88,26 @@ def test_endtoend_ai_polished_caught_genuine_not_hurt():
     rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
     assert rank[ra.overall.value] > rank[rb.overall.value]
     assert ra.overall.value == "HIGH"
+
+
+# —— over_alignment：JD 过度对齐（求职侧 AI 模式 #1/#2/#7）——
+
+_JD = ("高并发分布式后端，熟悉Redis缓存、Kafka消息队列、Docker部署、MySQL数据库、"
+       "微服务架构，有性能优化经验，负责QPS压测与稳定性。")
+
+
+def test_over_alignment_fires_on_jd_mirroring_resume():
+    mirrored = [Claim("精通Redis缓存、Kafka消息队列、Docker、MySQL、微服务，QPS压测优化，高可用分布式，性能提升。",
+                      source="resume")]
+    labels = {s.label for s in detect_overalignment(mirrored, _JD)}
+    assert "over_alignment" in labels
+
+
+def test_over_alignment_not_on_genuine_resume():
+    genuine = [Claim("主导过推荐系统缓存优化，用lua合热点key回源，命中率62%提到94%。", source="resume")]
+    labels = {s.label for s in detect_overalignment(genuine, _JD)}
+    assert "over_alignment" not in labels
+
+
+def test_over_alignment_no_jd_returns_empty():
+    assert detect_overalignment([Claim("x")], "") == []

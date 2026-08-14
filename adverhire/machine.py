@@ -5,7 +5,7 @@ from .parse import normalize_claims
 from .probe import trap_tactics, validate_traps
 from .scrutinize import (
     detect_signals, detect_contradictions,
-    detect_structural, detect_behavioral,
+    detect_structural, detect_behavioral, detect_overalignment,
 )
 from .verdict import grade_risk
 
@@ -44,11 +44,12 @@ class AdversarialStateMachine:
         return validate_traps(claims, raw_traps)
 
     def advance(self, answers, resume_claims: list[Claim],
-                summary: str = "") -> RiskReport:
+                summary: str = "", jd_text: str = "") -> RiskReport:
         turns = _as_turns(answers)
         signals = detect_signals([Claim(t.text, source="answer") for t in turns])
         signals += detect_structural(turns)
         signals += detect_behavioral(turns)
+        signals += detect_overalignment(resume_claims, jd_text)
         contradictions = detect_contradictions(resume_claims,
                                                [Claim(t.text, source="answer") for t in turns])
         return grade_risk(signals, contradictions, summary=summary)

@@ -15,6 +15,7 @@ _DIM_WEIGHT = {
     "detail_exhaustion": 1.0,
     "idiosyncrasy_absence": 1.0,
     "behavioral_uniformity": 1.0,
+    "over_alignment": 1.0,
     # 缺失式五维（低分，可被模仿）
     "template_cliche": 0.4,
     "over_generalization": 0.5,

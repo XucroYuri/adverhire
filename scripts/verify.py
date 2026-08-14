@@ -92,7 +92,8 @@ def cmd_review(args) -> int:
                 affect_cue=bool(item.get("affect_cue", False)),
                 reasoning_visible=bool(item.get("reasoning_visible", False)),
             ))
-    report = SM.advance(answers, claims, summary=args.summary or "")
+    jd_text = args.jd.read_text(encoding="utf-8") if args.jd else ""
+    report = SM.advance(answers, claims, summary=args.summary or "", jd_text=jd_text)
     payload = {
         "overall": report.overall.value,
         "signals": [
@@ -135,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--claims", required=True, type=Path)
     r.add_argument("--answers", required=True, type=Path)
     r.add_argument("--summary", type=str, default="")
+    r.add_argument("--jd", type=Path, default=None, help="岗位JD文本，用于检测'过度对齐'")
     r.add_argument("-o", "--out", type=Path, default=None)
 
     args = p.parse_args(argv)

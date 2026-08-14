@@ -231,6 +231,35 @@ def detect_behavioral(turns: list[AnswerTurn]) -> list[SignalEvidence]:
     return signals
 
 
+# —— over_alignment：JD 过度对齐（求职侧 AI 模式 #1/#2/#7）——
+
+
+def detect_overalignment(claims: list[Claim], jd_text: str) -> list[SignalEvidence]:
+    """过度对齐：候选人的自我介绍是否像"镜像 JD"。
+
+    第一性原理：真经历有缺口与噪声，覆盖 JD 的部分是天然的子集；AI 按 JD 反编译的简历/回答
+    会**逐词过多镜像** JD 关键词，且几乎无 JD 之外的独特性残差。对齐过高 + 过"完美"=生成痕迹。
+    纯规则：JD 独特技术词被候选人文本逐字命中的比例过高即命该信号。语义对齐由 subagent 落锤。
+    """
+    if not jd_text or not claims:
+        return []
+    ascii_kw = re.findall(r"[A-Za-z][A-Za-z0-9.+#/]*", jd_text)
+    # ASCII 命名技术词是"镜像 JD"最可靠的信号：AI 按 JD 反编译必然逐字带上 Redis/Kafka/QPS...
+    # 真经历覆盖的只是自然子集；全镜像 = 生成痕迹。中文 n-gram 词序易碎，不作主判据。
+    if len(ascii_kw) < 3:
+        return []
+    body = "\n".join(c.bullet for c in claims)
+    ascii_hit = sum(1 for k in ascii_kw if k.lower() in body.lower())
+    coverage = ascii_hit / len(ascii_kw)
+    if coverage >= 0.6:
+        return [SignalEvidence(
+            label="over_alignment", quote=body[:120],
+            confidence=min(1.0, 0.6 + 0.5 * (coverage - 0.6)),
+            verdict_note=f"自我介绍逐字覆盖了 JD 的 {coverage:.0%} 命名技术词，像按 JD 镜像而非真实经验",
+        )]
+    return []
+
+
 def _dedupe(contradictions: list[Contradiction]) -> list[Contradiction]:
     seen: set[tuple] = set()
     out: list[Contradiction] = []
